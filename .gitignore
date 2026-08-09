@@ -11,6 +11,7 @@ node_modules/.tmp
 tools/*.exe
 public/icons/icon-source.png
 once-11.apk
+apk-out
 android/.gradle
 android/app/build
 android/build
