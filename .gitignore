@@ -10,3 +10,10 @@ tsconfig.tsbuildinfo
 node_modules/.tmp
 tools/*.exe
 public/icons/icon-source.png
+once-11.apk
+android/.gradle
+android/app/build
+android/build
+android/local.properties
+android/captures
+android/.idea

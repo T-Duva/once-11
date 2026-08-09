@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
+import cors from 'cors'
 import { WebSocketServer } from 'ws'
 import webpush from 'web-push'
 
@@ -54,20 +55,39 @@ let subs = loadJson(subsPath, { tomas: null, martin: null })
 let watcher = { status: 'online', lastSeenAt: Date.now(), currentReportId: undefined, error: undefined }
 
 const app = express()
+app.use(cors({ origin: true }))
 app.use(express.json({ limit: '1mb' }))
+const apkPath = path.join(root, 'once-11.apk')
+app.get('/once-11.apk', (_req, res) => {
+  if (!fs.existsSync(apkPath)) return res.status(404).send('APK todavía no está listo')
+  res.download(apkPath, 'Once11.apk')
+})
 
 const dist = path.join(root, 'dist')
+function appVersion() {
+  return loadJson(path.join(root, 'package.json'), { version: '0.0.0' }).version || '0.0.0'
+}
+
 if (fs.existsSync(dist)) {
-  app.use(express.static(dist))
+  app.use(
+    express.static(dist, {
+      setHeaders(res, filePath) {
+        if (/\.(html|webmanifest|js)$/i.test(filePath) && /index\.html|sw\.js|manifest\.webmanifest$/i.test(filePath)) {
+          res.setHeader('Cache-Control', 'no-cache')
+        }
+      },
+    }),
+  )
   app.use((req, res, next) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') return next()
-    if (req.path.startsWith('/api')) return next()
+    if (req.path.startsWith('/api') || req.path === '/once-11.apk') return next()
+    res.setHeader('Cache-Control', 'no-cache')
     res.sendFile(path.join(dist, 'index.html'))
   })
 }
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, version: '1.0.0', watcher })
+  res.json({ ok: true, version: appVersion(), watcher })
 })
 app.get('/api/vapid', (_req, res) => {
   res.json({ publicKey: vapid.publicKey })
@@ -337,5 +357,5 @@ setInterval(() => {
 }, 5000)
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Once 11 v1.0.0 → http://127.0.0.1:${PORT}`)
+  console.log(`Once 11 v${appVersion()} → http://127.0.0.1:${PORT}`)
 })

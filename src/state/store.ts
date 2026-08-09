@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { emptyDb, type Database, type Patch, type Presence, type Screen, type UserId, type WatcherState } from '../types'
 import { createSync } from '../sync/client'
+import { resolveServerOrigin } from '../lib/server'
 import { APP_VERSION } from '../version'
 
 type SyncHandle = ReturnType<typeof createSync> | null
@@ -54,35 +55,43 @@ export const useApp = create<AppStore>((set, get) => ({
     persistUser(user)
     sync?.stop()
     set({ user, screen: 'home' })
-    sync = createSync(user, {
-      onDb: (db) => set({ db }),
-      onWatcher: (watcher) => set({ watcher }),
-      onPresence: (presence) => set({ presence }),
-      onVapid: async (vapidPublicKey) => {
-        set({ vapidPublicKey })
-        try {
-          await registerPush(user, vapidPublicKey, (msg) => sync?.send(msg))
-        } catch {
-          /* permiso denegado: igual anda in-app */
-        }
-      },
-      onStatus: (connected) => set({ connected }),
-    })
-    clearInterval(presenceTimer)
-    presenceTimer = setInterval(() => {
-      const s = get()
-      if (!s.user || !sync) return
-      sync.send({
-        type: 'presence',
-        presence: {
-          user: s.user,
-          screen: s.screen,
-          orderId: s.orderId ?? undefined,
-          fieldId: s.focusField,
-          updatedAt: Date.now(),
+    void (async () => {
+      const origin = await resolveServerOrigin()
+      if (get().user !== user) return
+      sync = createSync(
+        user,
+        {
+          onDb: (db) => set({ db }),
+          onWatcher: (watcher) => set({ watcher }),
+          onPresence: (presence) => set({ presence }),
+          onVapid: async (vapidPublicKey) => {
+            set({ vapidPublicKey })
+            try {
+              await registerPush(user, vapidPublicKey, (msg) => sync?.send(msg))
+            } catch {
+              /* permiso denegado: igual anda in-app */
+            }
+          },
+          onStatus: (connected) => set({ connected }),
         },
-      })
-    }, 2000)
+        origin,
+      )
+      clearInterval(presenceTimer)
+      presenceTimer = setInterval(() => {
+        const s = get()
+        if (!s.user || !sync) return
+        sync.send({
+          type: 'presence',
+          presence: {
+            user: s.user,
+            screen: s.screen,
+            orderId: s.orderId ?? undefined,
+            fieldId: s.focusField,
+            updatedAt: Date.now(),
+          },
+        })
+      }, 2000)
+    })()
   },
 
   logout() {

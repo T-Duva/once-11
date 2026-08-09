@@ -1,7 +1,7 @@
 {
   "name": "once-11",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,6 +11,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "firebase": "^12.17.1",
@@ -24,6 +27,8 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.0",
     "@eslint/js": "^9.25.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

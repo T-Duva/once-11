@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Shell } from './components/Shell'
+import { UpdateBanner } from './components/UpdateBanner'
 import { Login } from './screens/Login'
 import { Home } from './screens/Home'
 import { Planificar } from './screens/Planificar'
@@ -20,10 +21,19 @@ export default function App() {
     if (saved === 'tomas' || saved === 'martin') login(saved)
   }, [login])
 
-  if (!user) return <Login />
+  if (!user) {
+    return (
+      <>
+        <UpdateBanner />
+        <Login />
+      </>
+    )
+  }
 
   return (
-    <Shell>
+    <>
+      <UpdateBanner />
+      <Shell>
       {screen === 'home' && <Home />}
       {screen === 'plan' && <Planificar />}
       {screen === 'buy' && <Comprar />}
@@ -31,5 +41,6 @@ export default function App() {
       {screen === 'accounts' && <Cuentas />}
       {screen === 'audit' && <Historial />}
     </Shell>
+    </>
   )
 }

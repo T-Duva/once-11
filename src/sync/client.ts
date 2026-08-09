@@ -21,7 +21,7 @@ type Handlers = {
   onStatus: (connected: boolean) => void
 }
 
-export function createSync(user: UserId, handlers: Handlers) {
+export function createSync(user: UserId, handlers: Handlers, origin: string) {
   let ws: WebSocket | null = null
   let stopped = false
   let retry = 0
@@ -29,8 +29,9 @@ export function createSync(user: UserId, handlers: Handlers) {
 
   const connect = () => {
     if (stopped) return
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}://${location.host}/ws?user=${user}`
+    const base = new URL(origin)
+    const proto = base.protocol === 'https:' ? 'wss' : 'ws'
+    const url = `${proto}://${base.host}/ws?user=${user}`
     ws = new WebSocket(url)
 
     ws.onopen = () => {
