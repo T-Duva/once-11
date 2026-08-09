@@ -10,6 +10,13 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     cleartext: true,
+    allowNavigation: [
+      '*.tunnelmole.net',
+      '*.loca.lt',
+      '*.trycloudflare.com',
+      'raw.githubusercontent.com',
+      '192.168.1.27',
+    ],
   },
 };
 

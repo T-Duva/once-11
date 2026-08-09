@@ -40,13 +40,11 @@ export function UpdateBanner() {
 
   const mismatch = Boolean(remote && remote !== APP_VERSION)
   const native = isNativeApp()
-  if (native && !mismatch) return null
-  if (!native && !needRefresh && !mismatch) return null
 
   const apply = async () => {
     if (isNativeApp()) {
       const origin = await resolveServerOrigin()
-      window.open(`${origin}/once-11.apk`, '_system')
+      window.location.href = `${origin}/once-11.apk`
       return
     }
     try {
@@ -55,6 +53,29 @@ export function UpdateBanner() {
       /* igual recargamos */
     }
     window.location.reload()
+  }
+
+  useEffect(() => {
+    if (!native || !mismatch) return
+    const t = window.setTimeout(() => void apply(), 1500)
+    return () => window.clearTimeout(t)
+  }, [native, mismatch, remote])
+
+  if (native && !mismatch) return null
+  if (!native && !needRefresh && !mismatch) return null
+
+  if (native) {
+    return (
+      <div className="update-block" role="alertdialog">
+        <strong>Hay que actualizar</strong>
+        <p>
+          Estás en v{APP_VERSION} → v{remote}
+        </p>
+        <button type="button" className="btn primary big" onClick={() => void apply()}>
+          Descargar actualización
+        </button>
+      </div>
+    )
   }
 
   return (

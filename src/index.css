@@ -281,6 +281,19 @@ h1 { font-size: 1.8rem; font-weight: 700; }
 }
 .update-bar span { display: block; font-size: 0.82rem; opacity: 0.8; }
 .update-bar .btn.primary { background: #16120a; color: #f0c14b; flex-shrink: 0; }
+.update-block {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #070708;
+  color: var(--ink);
+  display: grid;
+  place-content: center;
+  gap: 0.8rem;
+  padding: calc(2rem + var(--safe-top)) 1.4rem calc(2rem + var(--safe-bottom));
+  text-align: center;
+}
+.update-block p { color: var(--muted); margin: 0; }
 .audit { padding: 0.65rem 0; border-bottom: 1px solid var(--line); display: grid; gap: 0.15rem; }
 .dot { margin: 0 0.35rem; }
 
