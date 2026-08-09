@@ -17,6 +17,10 @@
   --font: 'Schibsted Grotesk', sans-serif;
   --display: 'Big Shoulders Stencil Display', sans-serif;
   --radius: 16px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --update-drop: 3cm;
+  --nav-lift: 4cm;
 }
 
 * { box-sizing: border-box; }
@@ -68,7 +72,7 @@ h1 { font-size: 1.8rem; font-weight: 700; }
   min-height: 100%;
   display: grid;
   place-items: center;
-  padding: 1.5rem;
+  padding: calc(1.5rem + var(--safe-top)) 1.5rem calc(1.5rem + var(--safe-bottom));
   position: relative;
   overflow: hidden;
 }
@@ -102,7 +106,7 @@ h1 { font-size: 1.8rem; font-weight: 700; }
 .topbar {
   position: sticky; top: 0; z-index: 20;
   display: flex; justify-content: space-between; gap: 0.75rem; align-items: center;
-  padding: 0.7rem 0.9rem;
+  padding: calc(0.7rem + var(--safe-top)) 0.9rem 0.7rem;
   background: rgba(7,7,8,0.92);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(10px);
@@ -136,7 +140,7 @@ h1 { font-size: 1.8rem; font-weight: 700; }
 .light-off .light-dot { background: #2b2b2b; }
 @keyframes pulse { 50% { opacity: 0.45; } }
 
-.main { flex: 1; padding: 0.85rem 0.9rem 7.5rem; }
+.main { flex: 1; padding: 0.85rem 0.9rem calc(8rem + var(--nav-lift) + var(--safe-bottom)); }
 .page { display: grid; gap: 0.85rem; }
 .page-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
 .datebar {
@@ -149,7 +153,8 @@ h1 { font-size: 1.8rem; font-weight: 700; }
 .budget input { font-weight: 700; color: var(--sodium); }
 
 .tabbar {
-  position: fixed; left: 0; right: 0; bottom: 1.7rem;
+  position: fixed; left: 0; right: 0;
+  bottom: calc(var(--nav-lift) + var(--safe-bottom));
   display: grid; grid-template-columns: repeat(6, 1fr);
   gap: 0.25rem; padding: 0.4rem;
   margin: 0 0.5rem;
@@ -160,13 +165,14 @@ h1 { font-size: 1.8rem; font-weight: 700; }
 }
 .tabbar button {
   background: transparent; border: 0; color: var(--muted);
-  font-size: 0.68rem; padding: 0.55rem 0.1rem; border-radius: 12px;
+  font-size: 0.72rem; min-height: 48px; padding: 0.55rem 0.1rem; border-radius: 12px;
 }
 .tabbar button.on { background: #1c1f27; color: var(--sodium); font-weight: 700; }
 .foot {
-  position: fixed; left: 0; right: 0; bottom: 0;
+  position: fixed; left: 0; right: 0;
+  bottom: var(--safe-bottom);
   display: flex; justify-content: space-between;
-  padding: 0.2rem 1rem 0.35rem;
+  padding: 0.2rem 1rem 0.45rem;
   font-size: 0.72rem; color: var(--muted);
   background: var(--bg);
 }
@@ -215,7 +221,7 @@ h1 { font-size: 1.8rem; font-weight: 700; }
 .cuenta-head { display: flex; justify-content: space-between; }
 
 .totals-dock {
-  position: sticky; bottom: 5.4rem;
+  position: sticky; bottom: calc(5.8rem + var(--nav-lift) + var(--safe-bottom));
   display: flex; justify-content: flex-end; gap: 1.2rem;
   background: rgba(7,7,8,0.94);
   border: 1px solid var(--line);
@@ -268,6 +274,7 @@ h1 { font-size: 1.8rem; font-weight: 700; }
   justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
+  margin-top: calc(var(--safe-top) + var(--update-drop));
   padding: 0.75rem 0.9rem;
   background: #f0c14b;
   color: #16120a;

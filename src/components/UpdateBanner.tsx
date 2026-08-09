@@ -39,7 +39,9 @@ export function UpdateBanner() {
   }, [])
 
   const mismatch = Boolean(remote && remote !== APP_VERSION)
-  if (!needRefresh && !mismatch) return null
+  const native = isNativeApp()
+  if (native && !mismatch) return null
+  if (!native && !needRefresh && !mismatch) return null
 
   const apply = async () => {
     if (isNativeApp()) {
