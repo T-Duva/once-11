@@ -1,5 +1,5 @@
 const DISCOVERY = 'https://raw.githubusercontent.com/T-Duva/once-11/master/server.json'
-const FALLBACK = 'https://mlfzvw-ip-181-117-8-15.tunnelmole.net'
+const FALLBACK = 'https://c0yvzv-ip-181-117-8-15.tunnelmole.net'
 
 let cached: string | null = null
 
