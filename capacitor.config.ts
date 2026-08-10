@@ -15,6 +15,7 @@ const config: CapacitorConfig = {
       '*.loca.lt',
       '*.trycloudflare.com',
       'raw.githubusercontent.com',
+      'cdn.jsdelivr.net',
       '192.168.1.27',
     ],
   },
