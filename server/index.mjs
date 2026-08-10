@@ -89,6 +89,10 @@ if (fs.existsSync(dist)) {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, version: appVersion(), watcher })
 })
+app.post('/api/watcher/beat', (_req, res) => {
+  setWatcher({ status: watcher.status === 'stuck' ? 'stuck' : watcher.status === 'working' ? 'working' : 'online' })
+  res.json({ ok: true, watcher })
+})
 app.get('/api/vapid', (_req, res) => {
   res.json({ publicKey: vapid.publicKey })
 })

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { DateBar } from '../components/DateBar'
 import { FocusField } from '../components/FocusField'
 import { money, moneyDec } from '../lib/format'
+import { newId } from '../lib/id'
 import { lineTotal, orderSpent } from '../lib/stats'
 import { useApp } from '../state/store'
 import { STATIONS, STATION_LABEL, type PurchaseLine, type Station } from '../types'
@@ -36,7 +37,7 @@ export function Comprar() {
         op: 'upsert',
         col: 'purchaseLines',
         row: {
-          id: crypto.randomUUID(),
+          id: newId(),
           orderId,
           productId: p.productId,
           plannedQty: p.qty || 0,
@@ -73,7 +74,7 @@ export function Comprar() {
       op: 'upsert',
       col: 'purchaseLines',
       row: {
-        id: crypto.randomUUID(),
+        id: newId(),
         orderId,
         productId,
         plannedQty: plan?.qty ?? planned,
@@ -97,7 +98,7 @@ export function Comprar() {
       addLine(found.id)
       return
     }
-    const id = crypto.randomUUID()
+    const id = newId()
     apply({ op: 'upsert', col: 'products', row: { id, name, createdBy: user, createdAt: Date.now() } })
     addLine(id)
   }
@@ -106,7 +107,7 @@ export function Comprar() {
     return (
       <div className="page">
         <DateBar />
-        <p className="empty">Elegí la fecha de esta compra arriba.</p>
+        <p className="empty">Tocá Cargar fecha para esta compra.</p>
       </div>
     )
   }
@@ -134,28 +135,44 @@ export function Comprar() {
         }
       />
 
-      <FocusField id="buy-search">
-        <label className="search">
-          Buscador
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Producto…" />
-        </label>
-      </FocusField>
-      {query && (
-        <ul className="suggest">
-          {matches.map((p) => (
-            <li key={p.id}>
-              <button type="button" onClick={() => addLine(p.id)}>
-                {p.name}
-              </button>
-            </li>
-          ))}
+      <div className="add-row">
+        <FocusField id="buy-search">
+          <label className="search">
+            Producto
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Producto…"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  createAndAdd()
+                }
+              }}
+            />
+          </label>
+        </FocusField>
+        <button type="button" className="btn primary" onClick={createAndAdd} disabled={!q.trim()}>
+          Agregar
+        </button>
+      </div>
+      <ul className="suggest">
+        {(query ? matches : db.products.slice(0, 8)).map((p) => (
+          <li key={p.id}>
+            <button type="button" onClick={() => addLine(p.id)}>
+              {p.name}
+            </button>
+          </li>
+        ))}
+        {query && (
           <li>
             <button type="button" onClick={createAndAdd}>
               Agregar “{q.trim()}”
             </button>
           </li>
-        </ul>
-      )}
+        )}
+      </ul>
+      {lines.length === 0 && <p className="empty">Escribí un producto y tocá Agregar.</p>}
 
       <ul className="cards">
         {lines.map((line) => {

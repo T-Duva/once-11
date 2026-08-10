@@ -21,6 +21,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const logout = useApp((s) => s.logout)
   const presence = useApp((s) => s.presence)
   const toast = useApp((s) => s.toast)
+  const connected = useApp((s) => s.connected)
   const clearToast = useApp((s) => s.clearToast)
   const db = useApp((s) => s.db)
   const mark = useApp((s) => s.markNotifRead)
@@ -32,11 +33,12 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-11">11</span>
+          <img className="brand-11" src="/icons/icon-192.png" width={42} height={42} alt="" />
           <div>
             <strong>{APP_NAME}</strong>
             <small>
-              {user ? USER_LABEL[user] : ''}
+              v{APP_VERSION}
+              {user ? ` · ${USER_LABEL[user]}` : ''}
               {otherHere ? ` · ${USER_LABEL[otherHere.user]} en ${navLabel(otherHere.screen)}` : ''}
             </small>
           </div>
@@ -46,9 +48,15 @@ export function Shell({ children }: { children: ReactNode }) {
           <button type="button" className="btn report" onClick={() => setReportOpen(true)}>
             Reportar
           </button>
+          <button type="button" className="linkish" onClick={logout}>
+            Salir
+          </button>
         </div>
       </header>
 
+      {!connected && (
+        <p className="banner">Sin conexión con la PC. No se guarda nada hasta que la luz esté verde.</p>
+      )}
       {notifs.map((n) => (
         <button type="button" key={n.id} className="banner" onClick={() => mark(n.id)}>
           <strong>{n.title}</strong>
@@ -74,12 +82,6 @@ export function Shell({ children }: { children: ReactNode }) {
         </button>
       </nav>
 
-      <footer className="foot">
-        <span>v{APP_VERSION}</span>
-        <button type="button" className="linkish" onClick={logout}>
-          Salir
-        </button>
-      </footer>
       <ReportModal />
     </div>
   )

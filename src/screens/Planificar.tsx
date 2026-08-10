@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { FocusField } from '../components/FocusField'
 import { DateBar } from '../components/DateBar'
 import { qtyLabel } from '../lib/format'
+import { newId } from '../lib/id'
 import { lastPurchasedQty, productMedian } from '../lib/stats'
 import { useApp } from '../state/store'
 import { STATIONS, STATION_LABEL, type PlanItem } from '../types'
@@ -30,7 +31,7 @@ export function Planificar() {
       const found = db.products.find((p) => p.name.toLowerCase() === trimmed.toLowerCase())
       if (found) productId = found.id
       else {
-        productId = crypto.randomUUID()
+        productId = newId()
         apply({
           op: 'upsert',
           col: 'products',
@@ -43,7 +44,7 @@ export function Planificar() {
       return
     }
     const row: PlanItem = {
-      id: crypto.randomUUID(),
+      id: newId(),
       orderId,
       productId,
       qty: lastPurchasedQty(db, productId) ?? productMedian(db, productId) ?? 0,
@@ -57,7 +58,7 @@ export function Planificar() {
     return (
       <div className="page">
         <DateBar />
-        <p className="empty">Poné una fecha arriba para armar el pedido.</p>
+        <p className="empty">Tocá Cargar fecha o Cargar hoy para armar el pedido.</p>
       </div>
     )
   }
@@ -68,43 +69,47 @@ export function Planificar() {
       <header className="page-head">
         <h1>Planificar</h1>
       </header>
-      <FocusField id="plan-search">
-        <label className="search">
-          Buscar / agregar
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Ej. bidón 20L"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                addProduct(q, matches[0]?.id && matches[0].name.toLowerCase() === q.trim().toLowerCase() ? matches[0].id : undefined)
-              }
-            }}
-          />
-        </label>
-      </FocusField>
-      {q.trim() && (
-        <ul className="suggest">
-          {matches.map((p) => (
-            <li key={p.id}>
-              <button type="button" onClick={() => addProduct(p.name, p.id)}>
-                {p.name}
-                <small>
-                  última {qtyLabel(lastPurchasedQty(db, p.id))} · mediana {qtyLabel(productMedian(db, p.id))}
-                </small>
-              </button>
-            </li>
-          ))}
-          {(!matches.length || !matches.some((p) => p.name.toLowerCase() === q.trim().toLowerCase())) && (
-            <li>
-              <button type="button" onClick={() => addProduct(q)}>
-                Crear “{q.trim()}”
-              </button>
-            </li>
-          )}
-        </ul>
-      )}
+      <div className="add-row">
+        <FocusField id="plan-search">
+          <label className="search">
+            Producto
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Ej. bidón 20L"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addProduct(q)
+                }
+              }}
+            />
+          </label>
+        </FocusField>
+        <button type="button" className="btn primary" onClick={() => addProduct(q)} disabled={!q.trim()}>
+          Agregar
+        </button>
+      </div>
+      <ul className="suggest">
+        {matches.map((p) => (
+          <li key={p.id}>
+            <button type="button" onClick={() => addProduct(p.name, p.id)}>
+              {p.name}
+              <small>
+                última {qtyLabel(lastPurchasedQty(db, p.id))} · mediana {qtyLabel(productMedian(db, p.id))}
+              </small>
+            </button>
+          </li>
+        ))}
+        {q.trim() && !matches.some((p) => p.name.toLowerCase() === q.trim().toLowerCase()) && (
+          <li>
+            <button type="button" onClick={() => addProduct(q)}>
+              Crear “{q.trim()}”
+            </button>
+          </li>
+        )}
+      </ul>
+      {items.length === 0 && <p className="empty">Escribí un producto y tocá Agregar.</p>}
 
       <ul className="cards">
         {items.map((item) => {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { DateBar } from '../components/DateBar'
 import { FocusField } from '../components/FocusField'
 import { formatDateISO, money } from '../lib/format'
+import { newId } from '../lib/id'
 import { lineCostForStation, lineHasPurchase, stationSpentInOrder } from '../lib/stats'
 import { useApp } from '../state/store'
 import { STATIONS, STATION_LABEL, type Payment, type Station } from '../types'
@@ -19,7 +20,7 @@ export function Repartir() {
     return (
       <div className="page">
         <DateBar />
-        <p className="empty">Elegí la fecha de la repartición.</p>
+        <p className="empty">Tocá Cargar fecha para la repartición.</p>
       </div>
     )
   }
@@ -32,7 +33,7 @@ export function Repartir() {
     const amount = Number(payAmt.replace(',', '.')) || 0
     if (amount <= 0 || !payDate) return
     const row: Payment = {
-      id: crypto.randomUUID(),
+      id: newId(),
       station,
       date: payDate,
       amount,

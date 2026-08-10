@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { formatDateISO, parseISO, toISODate } from '../lib/format'
+import { newId } from '../lib/id'
 import { useApp } from '../state/store'
 import type { Order, UserId } from '../types'
 
@@ -23,20 +24,20 @@ export function DateBar({ extra }: { extra?: ReactNode }) {
     setYear(p.year)
   }, [orderId, db.orders])
 
+  useEffect(() => {
+    if (!user) return
+    if (orderId && db.orders.some((o) => o.id === orderId)) return
+    const created = ensureOrder(db.orders, todayISO(), user, apply, setOrderId)
+    if (created) setDay(String(parseISO(created.date).day))
+  }, [user, orderId, db.orders, apply, setOrderId])
+
   const commit = () => {
     const d = clamp(Number(day), 1, 31)
     const m = clamp(Number(month), 1, 12)
     const y = year || new Date().getFullYear()
     const iso = toISODate(d, m, y)
-    const existing = db.orders.find((o) => o.date === iso)
-    if (existing) {
-      setOrderId(existing.id)
-      return
-    }
     if (!user) return
-    const created = makeOrder(iso, user)
-    apply({ op: 'upsert', col: 'orders', row: created })
-    setOrderId(created.id)
+    ensureOrder(db.orders, iso, user, apply, setOrderId)
   }
 
   return (
@@ -57,10 +58,31 @@ export function DateBar({ extra }: { extra?: ReactNode }) {
           />
         </span>
       </label>
+      <button type="button" className="btn primary" onClick={commit}>
+        Cargar fecha
+      </button>
       {order && <span className="date-preview">{formatDateISO(order.date)}</span>}
       {extra}
     </div>
   )
+}
+
+export function ensureOrder(
+  orders: Order[],
+  iso: string,
+  user: UserId,
+  apply: (p: { op: 'upsert'; col: 'orders'; row: Order }) => void,
+  setOrderId: (id: string) => void,
+): Order {
+  const existing = orders.find((o) => o.date === iso)
+  if (existing) {
+    setOrderId(existing.id)
+    return existing
+  }
+  const created = makeOrder(iso, user)
+  apply({ op: 'upsert', col: 'orders', row: created })
+  setOrderId(created.id)
+  return created
 }
 
 export function todayISO(): string {
@@ -72,7 +94,7 @@ export function todayISO(): string {
 
 export function makeOrder(iso: string, user: UserId): Order {
   return {
-    id: crypto.randomUUID(),
+    id: newId(),
     date: iso,
     budget: 0,
     status: 'planificando',

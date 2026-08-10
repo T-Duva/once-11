@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { emptyDb, type Database, type Patch, type Presence, type Screen, type UserId, type WatcherState } from '../types'
 import { createSync } from '../sync/client'
+import { applyPatchLocal } from '../lib/patch'
 import { resolveServerOrigin } from '../lib/server'
 import { APP_VERSION } from '../version'
 
@@ -126,8 +127,14 @@ export const useApp = create<AppStore>((set, get) => ({
 
   apply(patch) {
     const user = get().user
-    if (!user || !sync) return
+    if (!user) return
+    set({ db: applyPatchLocal(get().db, patch, user) })
+    if (!sync) {
+      set({ toast: 'Sin conexión con la PC. Abrí Once 11 en la computadora.' })
+      return
+    }
     sync.send({ type: 'patch', patch, user })
+    if (!sync.isOpen()) set({ toast: 'Sin conexión con la PC. Se va a guardar cuando vuelva.' })
   },
 
   sendReport(text) {

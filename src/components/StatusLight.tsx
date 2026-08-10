@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useApp } from '../state/store'
 import type { WatcherStatus } from '../types'
 
-const LABELS: Record<WatcherStatus | 'off', string> = {
+const LABELS: Record<WatcherStatus, string> = {
   online: 'Online',
   working: 'Trabajando…',
   stuck: 'Trabado',
@@ -12,14 +12,19 @@ const LABELS: Record<WatcherStatus | 'off', string> = {
 export function StatusLight() {
   const watcher = useApp((s) => s.watcher)
   const connected = useApp((s) => s.connected)
+  const [, tick] = useState(0)
 
-  const status = useMemo((): WatcherStatus => {
-    if (!connected) return 'off'
-    const age = Date.now() - (watcher.lastSeenAt || 0)
-    if (!watcher.lastSeenAt || age > 25000) return 'off'
-    if (watcher.status === 'working' && age > 3 * 60 * 1000) return 'stuck'
-    return watcher.status || 'off'
-  }, [watcher, connected])
+  useEffect(() => {
+    const id = window.setInterval(() => tick((n) => n + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  let status: WatcherStatus = 'off'
+  if (connected) {
+    if (watcher.status === 'stuck') status = 'stuck'
+    else if (watcher.status === 'working') status = 'working'
+    else status = 'online'
+  }
 
   return (
     <button type="button" className={`light-btn light-${status}`} title={`Escucha: ${LABELS[status]}`} aria-label={LABELS[status]}>

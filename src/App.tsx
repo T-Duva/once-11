@@ -23,24 +23,24 @@ export default function App() {
 
   if (!user) {
     return (
-      <>
+      <div className="frame">
         <UpdateBanner />
         <Login />
-      </>
+      </div>
     )
   }
 
   return (
-    <>
+    <div className="frame">
       <UpdateBanner />
       <Shell>
-      {screen === 'home' && <Home />}
-      {screen === 'plan' && <Planificar />}
-      {screen === 'buy' && <Comprar />}
-      {screen === 'split' && <Repartir />}
-      {screen === 'accounts' && <Cuentas />}
-      {screen === 'audit' && <Historial />}
-    </Shell>
-    </>
+        {screen === 'home' && <Home />}
+        {screen === 'plan' && <Planificar />}
+        {screen === 'buy' && <Comprar />}
+        {screen === 'split' && <Repartir />}
+        {screen === 'accounts' && <Cuentas />}
+        {screen === 'audit' && <Historial />}
+      </Shell>
+    </div>
   )
 }

@@ -37,6 +37,7 @@ export function Login() {
       </div>
       <form className="login-card" onSubmit={onSubmit}>
         <p className="eyebrow">Once · Madro Ligux Elugas</p>
+        <img className="login-icon" src="/icons/icon-192.png" width={72} height={72} alt="" />
         <h1>{APP_NAME}</h1>
         <label>
           Usuario

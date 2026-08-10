@@ -33,12 +33,12 @@ export function Home() {
       <header className="page-head">
         <h1>Órdenes</h1>
         <button type="button" className="btn primary" onClick={openNew}>
-          Hoy
+          Cargar hoy
         </button>
       </header>
-      <p className="hint">Elegí la fecha arriba o una orden. Planificar no cuenta como compra.</p>
+      <p className="hint">Tocá Cargar hoy o Cargar fecha. Después andá a Planificar y agregá productos.</p>
       <ul className="order-list">
-        {orders.length === 0 && <li className="empty">Todavía no hay órdenes.</li>}
+        {orders.length === 0 && <li className="empty">Todavía no hay órdenes. Tocá Cargar hoy.</li>}
         {orders.map((o) => {
           const bought = orderIsPurchased(db, o.id)
           return (

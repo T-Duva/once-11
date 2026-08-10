@@ -12,6 +12,7 @@ export type ClientMsg =
   | { type: 'presence'; presence: Presence }
   | { type: 'report'; user: UserId; text: string; screen: Presence['screen']; orderId?: string; version: string }
   | { type: 'push-sub'; user: UserId; subscription: PushSubscriptionJSON }
+  | { type: 'ping' }
 
 type Handlers = {
   onDb: (db: Database) => void
@@ -26,6 +27,12 @@ export function createSync(user: UserId, handlers: Handlers, origin: string) {
   let stopped = false
   let retry = 0
   let ping: ReturnType<typeof setInterval> | undefined
+  const queue: ClientMsg[] = []
+
+  const flush = () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+    while (queue.length) ws.send(JSON.stringify(queue.shift()))
+  }
 
   const connect = () => {
     if (stopped) return
@@ -37,6 +44,7 @@ export function createSync(user: UserId, handlers: Handlers, origin: string) {
     ws.onopen = () => {
       retry = 0
       handlers.onStatus(true)
+      flush()
     }
 
     ws.onmessage = (ev) => {
@@ -70,6 +78,10 @@ export function createSync(user: UserId, handlers: Handlers, origin: string) {
   return {
     send(msg: ClientMsg) {
       if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
+      else queue.push(msg)
+    },
+    isOpen() {
+      return ws?.readyState === WebSocket.OPEN
     },
     stop() {
       stopped = true
