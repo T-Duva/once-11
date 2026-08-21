@@ -1,7 +1,7 @@
 {
   "name": "once-11",
   "private": true,
-  "version": "1.0.5 v",
+  "version": "1.0.7",
   "type": "module",
   "scripts": {
     "dev": "vite",

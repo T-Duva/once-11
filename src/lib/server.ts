@@ -1,18 +1,25 @@
+import { Capacitor } from '@capacitor/core'
+
 const DISCOVERY_URLS = [
   'https://raw.githubusercontent.com/T-Duva/once-11/master/server.json',
   'https://cdn.jsdelivr.net/gh/T-Duva/once-11@master/server.json',
   'https://raw.githubusercontent.com/T-Duva/once-11/main/server.json',
 ]
 const FALLBACKS = [
-  'https://c0yvzv-ip-181-117-8-15.tunnelmole.net',
+  'https://mysql-detect-bars-karma.trycloudflare.com',
   'http://192.168.1.27:8787',
 ]
 
 let cached: string | null = null
 
 export function isNativeApp(): boolean {
-  const w = window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }
-  return Boolean(w.Capacitor?.isNativePlatform?.())
+  if (Capacitor.isNativePlatform()) return true
+  try {
+    if (sessionStorage.getItem('once11.fromApp') === '1') return true
+  } catch {
+    /* modo privado */
+  }
+  return new URLSearchParams(location.search).has('fromApp')
 }
 
 function hereOrigin(): string {
@@ -28,6 +35,15 @@ function isBundledHost(): boolean {
   )
 }
 
+/** localtunnel muestra cartel HTML al WebView; este header lo salta. */
+function apiHeaders(extra?: HeadersInit): HeadersInit {
+  return {
+    'bypass-tunnel-reminder': '1',
+    Accept: 'application/json',
+    ...(extra || {}),
+  }
+}
+
 async function healthy(origin: string): Promise<boolean> {
   const ctrl = new AbortController()
   const t = window.setTimeout(() => ctrl.abort(), 3500)
@@ -35,8 +51,20 @@ async function healthy(origin: string): Promise<boolean> {
     const r = await fetch(`${origin.replace(/\/$/, '')}/api/health?t=${Date.now()}`, {
       cache: 'no-store',
       signal: ctrl.signal,
+      headers: apiHeaders(),
     })
-    return r.ok
+    if (!r.ok) return false
+    const ct = (r.headers.get('content-type') || '').toLowerCase()
+    if (ct.includes('text/html')) return false
+    // Rechazar túnel/servidor de otra app (REPOSICIÓN, Reportador, etc.).
+    try {
+      const j = (await r.json()) as { app?: string; appId?: string }
+      if (j.app && j.app !== 'once11') return false
+      if (j.appId && j.appId !== 'com.once11.app') return false
+    } catch {
+      return false
+    }
+    return true
   } catch {
     return false
   } finally {
@@ -45,19 +73,37 @@ async function healthy(origin: string): Promise<boolean> {
 }
 
 async function readDiscovery(): Promise<string | null> {
-  for (const url of DISCOVERY_URLS) {
-    const ctrl = new AbortController()
-    const t = window.setTimeout(() => ctrl.abort(), 4000)
-    try {
-      const r = await fetch(`${url}?t=${Date.now()}`, { cache: 'no-store', signal: ctrl.signal })
-      if (!r.ok) continue
-      const j = (await r.json()) as { url?: string }
-      if (j.url) return j.url.replace(/\/$/, '')
-    } catch {
-      /* siguiente */
-    } finally {
-      window.clearTimeout(t)
-    }
+  const urls = DISCOVERY_URLS.map((u) => `${u}?t=${Date.now()}`)
+  const hits = await Promise.all(
+    urls.map(async (url) => {
+      const ctrl = new AbortController()
+      const t = window.setTimeout(() => ctrl.abort(), 5000)
+      try {
+        const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal })
+        if (!r.ok) return null
+        const j = (await r.json()) as { url?: string }
+        return j.url ? j.url.replace(/\/$/, '') : null
+      } catch {
+        return null
+      } finally {
+        window.clearTimeout(t)
+      }
+    }),
+  )
+  return hits.find(Boolean) ?? null
+}
+
+async function tryHealthyOrigin(
+  origin: string | null | undefined,
+  tried: Set<string>,
+): Promise<string | null> {
+  if (!origin) return null
+  const url = origin.replace(/\/$/, '')
+  if (tried.has(url)) return null
+  tried.add(url)
+  if (await healthy(url)) {
+    setServerOrigin(url)
+    return url
   }
   return null
 }
@@ -66,21 +112,20 @@ export async function resolveServerOrigin(): Promise<string> {
   const here = hereOrigin()
   const tried = new Set<string>()
 
-  const tryOne = async (origin: string | null | undefined) => {
-    if (!origin) return null
-    const url = origin.replace(/\/$/, '')
-    if (tried.has(url)) return null
-    tried.add(url)
-    if (await healthy(url)) {
-      setServerOrigin(url)
-      return url
-    }
-    return null
-  }
+  const tryOne = (origin: string | null | undefined) => tryHealthyOrigin(origin, tried)
 
   if (!isBundledHost()) {
     const ok = await tryOne(here)
     if (ok) return ok
+  } else {
+    // APK: la URL del tunel cambia; GitHub primero, no confiar en cache vieja.
+    const discovered = await readDiscovery()
+    const fromDisc = await tryOne(discovered)
+    if (fromDisc) return fromDisc
+    for (const fb of FALLBACKS) {
+      const ok = await tryOne(fb)
+      if (ok) return ok
+    }
   }
 
   const saved = localStorage.getItem('once11.server')
@@ -94,17 +139,68 @@ export async function resolveServerOrigin(): Promise<string> {
   const discovered = await readDiscovery()
   const fromDisc = await tryOne(discovered)
   if (fromDisc) return fromDisc
-
   for (const fb of FALLBACKS) {
     const ok = await tryOne(fb)
     if (ok) return ok
   }
 
-  cached = isBundledHost() ? FALLBACKS[0] : here
+  cached = here
   return cached
+}
+
+/** Para compartir enlace APK: solo URL comprobada con /api/health. */
+export async function resolveHealthyOrigin(): Promise<string> {
+  cached = null
+  try {
+    localStorage.removeItem('once11.server')
+  } catch {
+    /* modo privado */
+  }
+
+  const tried = new Set<string>()
+  const discovered = await readDiscovery()
+  const fromDisc = await tryHealthyOrigin(discovered, tried)
+  if (fromDisc) return fromDisc
+  for (const fb of FALLBACKS) {
+    const ok = await tryHealthyOrigin(fb, tried)
+    if (ok) return ok
+  }
+  throw new Error('Sin servidor')
 }
 
 export function setServerOrigin(url: string) {
   cached = url.replace(/\/$/, '')
   localStorage.setItem('once11.server', cached)
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

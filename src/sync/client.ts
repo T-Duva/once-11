@@ -1,16 +1,18 @@
 import { emptyDb, type Database, type Patch, type Presence, type UserId, type WatcherState } from '../types'
-
-export type ServerMsg =
-  | { type: 'hello'; db: Database; watcher: WatcherState; presence: Presence[]; vapidPublicKey: string }
-  | { type: 'db'; db: Database }
-  | { type: 'watcher'; watcher: WatcherState }
-  | { type: 'presence'; presence: Presence[] }
-  | { type: 'error'; message: string }
+import { loadOfflineQueue, pendingOfflineCount, saveOfflineQueue } from '../lib/offlineQueue'
 
 export type ClientMsg =
   | { type: 'patch'; patch: Patch; user: UserId }
   | { type: 'presence'; presence: Presence }
-  | { type: 'report'; user: UserId; text: string; screen: Presence['screen']; orderId?: string; version: string }
+  | {
+      type: 'report'
+      user: UserId
+      text: string
+      screen: Presence['screen']
+      orderId?: string
+      version: string
+      photos?: string[]
+    }
   | { type: 'push-sub'; user: UserId; subscription: PushSubscriptionJSON }
   | { type: 'ping' }
 
@@ -20,73 +22,214 @@ type Handlers = {
   onPresence: (p: Presence[]) => void
   onVapid: (key: string) => void
   onStatus: (connected: boolean) => void
+  onError?: (message: string) => void
+  onPending?: (count: number) => void
+  onSynced?: () => void
+}
+
+function typingNow() {
+  const el = document.activeElement
+  return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+}
+
+function watcherKey(w: WatcherState) {
+  return `${w.status}|${w.pendingCount || 0}|${w.currentReportId || ''}|${w.error || ''}`
+}
+
+function presenceKey(list: Presence[]) {
+  return list.map((p) => `${p.user}:${p.screen}:${p.orderId || ''}:${p.fieldId || ''}`).join('|')
+}
+
+function dbFingerprint(db: Database) {
+  let h = 0
+  for (const l of db.purchaseLines) {
+    h = (Math.imul(h, 33) + (l.actualQty || 0) + Math.round((l.unitPrice || 0) * 10) + (l.plannedQty || 0)) | 0
+  }
+  for (const p of db.planItems) {
+    h = (Math.imul(h, 33) + (p.qty || 0)) | 0
+  }
+  const reports = (db.reports || []).map((r) => `${r.id}:${r.status}`).join(',')
+  return `${db.products.length}|${db.orders.length}|${db.planItems.length}|${db.purchaseLines.length}|${db.payments.length}|${db.audit[0]?.id || ''}|${h}|${reports}`
 }
 
 export function createSync(user: UserId, handlers: Handlers, origin: string) {
-  let ws: WebSocket | null = null
   let stopped = false
-  let retry = 0
-  let ping: ReturnType<typeof setInterval> | undefined
-  const queue: ClientMsg[] = []
+  let lastOk = false
+  let pulling = false
+  let flushing = false
+  let lastPending = pendingOfflineCount()
+  let lastWatcher = ''
+  let lastPresence = ''
+  let lastDb = ''
+  let vapidDone = false
+  const base = origin.replace(/\/$/, '')
 
-  const flush = () => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return
-    while (queue.length) ws.send(JSON.stringify(queue.shift()))
+  function notifyPending() {
+    const n = pendingOfflineCount()
+    handlers.onPending?.(n)
+    if (lastPending > 0 && n === 0) handlers.onSynced?.()
+    lastPending = n
   }
 
-  const connect = () => {
-    if (stopped) return
-    const base = new URL(origin)
-    const proto = base.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${proto}://${base.host}/ws?user=${user}`
-    ws = new WebSocket(url)
+  async function post(path: string, body: unknown) {
+    const r = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'bypass-tunnel-reminder': '1',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(body),
+      cache: 'no-store',
+    })
+    const j = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string; db?: Database }
+    if (!r.ok) {
+      if (j.error) handlers.onError?.(j.error)
+      throw new Error(j.error || `HTTP ${r.status}`)
+    }
+    return j
+  }
 
-    ws.onopen = () => {
-      retry = 0
+  async function flush() {
+    if (flushing || stopped) return
+    flushing = true
+    try {
+      while (!stopped) {
+        const queue = loadOfflineQueue()
+        if (!queue.length) break
+        const msg = queue[0]
+        try {
+          if (msg.type === 'patch') {
+            const j = await post('/api/patch', { patch: msg.patch, user: msg.user })
+            saveOfflineQueue(queue.slice(1))
+            notifyPending()
+            if (j.db && pendingOfflineCount() === 0) {
+              lastDb = dbFingerprint(j.db)
+              handlers.onDb(j.db)
+            }
+            lastOk = true
+            handlers.onStatus(true)
+            continue
+          }
+          if (msg.type === 'report') {
+            await post('/api/report', msg)
+          } else if (msg.type === 'push-sub') {
+            await post('/api/push-sub', { user: msg.user, subscription: msg.subscription })
+          } else {
+            saveOfflineQueue(queue.slice(1))
+            notifyPending()
+            continue
+          }
+          saveOfflineQueue(queue.slice(1))
+          notifyPending()
+          lastOk = true
+          handlers.onStatus(true)
+        } catch (err) {
+          const text = String((err as Error).message || err)
+          if (text.startsWith('No da:') || text.startsWith('HTTP 400')) {
+            saveOfflineQueue(queue.slice(1))
+            notifyPending()
+            continue
+          }
+          lastOk = false
+          handlers.onStatus(false)
+          return
+        }
+      }
+    } finally {
+      flushing = false
+    }
+  }
+
+  async function pull() {
+    if (stopped || pulling) return
+    pulling = true
+    try {
+      const r = await fetch(`${base}/api/state?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'bypass-tunnel-reminder': '1', Accept: 'application/json' },
+      })
+      const ct = (r.headers.get('content-type') || '').toLowerCase()
+      if (ct.includes('text/html')) throw new Error('tunnel interstitial')
+      if (!r.ok) throw new Error(String(r.status))
+      const j = (await r.json()) as {
+        db: Database
+        watcher: WatcherState
+        presence: Presence[]
+        vapidPublicKey?: string
+      }
+      lastOk = true
       handlers.onStatus(true)
-      flush()
-    }
-
-    ws.onmessage = (ev) => {
-      const msg = JSON.parse(String(ev.data)) as ServerMsg
-      if (msg.type === 'hello') {
-        handlers.onDb(msg.db)
-        handlers.onWatcher(msg.watcher)
-        handlers.onPresence(msg.presence)
-        handlers.onVapid(msg.vapidPublicKey)
-      } else if (msg.type === 'db') handlers.onDb(msg.db)
-      else if (msg.type === 'watcher') handlers.onWatcher(msg.watcher)
-      else if (msg.type === 'presence') handlers.onPresence(msg.presence)
-    }
-
-    ws.onclose = () => {
+      if (j.watcher) {
+        const wk = watcherKey(j.watcher)
+        if (wk !== lastWatcher) {
+          lastWatcher = wk
+          handlers.onWatcher(j.watcher)
+        }
+      }
+      if (j.presence) {
+        const pk = presenceKey(j.presence)
+        if (pk !== lastPresence) {
+          lastPresence = pk
+          handlers.onPresence(j.presence)
+        }
+      }
+      if (j.vapidPublicKey && !vapidDone) {
+        vapidDone = true
+        void handlers.onVapid(j.vapidPublicKey)
+      }
+      if (!pendingOfflineCount() && j.db && !typingNow()) {
+        const dk = dbFingerprint(j.db)
+        if (dk !== lastDb) {
+          lastDb = dk
+          handlers.onDb(j.db)
+        }
+      }
+      await flush()
+    } catch {
+      lastOk = false
       handlers.onStatus(false)
-      handlers.onWatcher({ status: 'off', lastSeenAt: 0 })
-      if (stopped) return
-      const wait = Math.min(8000, 600 * 2 ** retry++)
-      setTimeout(connect, wait)
+      await flush()
+    } finally {
+      pulling = false
     }
-
-    ws.onerror = () => ws?.close()
   }
 
-  connect()
-  ping = setInterval(() => {
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }))
-  }, 8000)
+  async function sendPresence(presence: Presence) {
+    if (stopped) return
+    try {
+      await post('/api/presence', { presence: { ...presence, user } })
+      lastOk = true
+      handlers.onStatus(true)
+    } catch {
+      lastOk = false
+      handlers.onStatus(false)
+    }
+  }
+
+  function nudge() {
+    if (typingNow()) return
+    void pull()
+  }
+
+  notifyPending()
+  void pull()
+  const tick = window.setInterval(nudge, 4000)
+  window.addEventListener('online', nudge)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') nudge()
+  })
 
   return {
-    send(msg: ClientMsg) {
-      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
-      else queue.push(msg)
-    },
+    sendPresence,
+    flush: () => void flush(),
     isOpen() {
-      return ws?.readyState === WebSocket.OPEN
+      return lastOk
     },
     stop() {
       stopped = true
-      clearInterval(ping)
-      ws?.close()
+      window.clearInterval(tick)
+      window.removeEventListener('online', nudge)
     },
   }
 }
