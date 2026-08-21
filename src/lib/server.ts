@@ -1,8 +1,9 @@
 import { Capacitor } from '@capacitor/core'
 
 const DISCOVERY_URLS = [
-  'https://raw.githubusercontent.com/T-Duva/once-11/master/server.json',
+  'https://api.github.com/repos/T-Duva/once-11/contents/server.json?ref=master',
   'https://cdn.jsdelivr.net/gh/T-Duva/once-11@master/server.json',
+  'https://raw.githubusercontent.com/T-Duva/once-11/master/server.json',
   'https://raw.githubusercontent.com/T-Duva/once-11/main/server.json',
 ]
 const FALLBACKS = [
@@ -73,16 +74,39 @@ async function healthy(origin: string): Promise<boolean> {
 }
 
 async function readDiscovery(): Promise<string | null> {
-  const urls = DISCOVERY_URLS.map((u) => `${u}?t=${Date.now()}`)
+  const urls = DISCOVERY_URLS.map((u) => `${u}${u.includes('?') ? '&' : '?'}t=${Date.now()}`)
   const hits = await Promise.all(
     urls.map(async (url) => {
       const ctrl = new AbortController()
       const t = window.setTimeout(() => ctrl.abort(), 5000)
       try {
-        const r = await fetch(url, { cache: 'no-store', signal: ctrl.signal })
+        const r = await fetch(url, {
+          cache: 'no-store',
+          signal: ctrl.signal,
+          headers: {
+            Accept: 'application/vnd.github.raw+json, application/json',
+            'bypass-tunnel-reminder': '1',
+          },
+        })
         if (!r.ok) return null
-        const j = (await r.json()) as { url?: string }
-        return j.url ? j.url.replace(/\/$/, '') : null
+        const text = await r.text()
+        let j: { url?: string; content?: string; encoding?: string }
+        try {
+          j = JSON.parse(text) as { url?: string; content?: string; encoding?: string }
+        } catch {
+          return null
+        }
+        if (j.url) return j.url.replace(/\/$/, '')
+        // GitHub Contents API (base64) — evita el CDN pegado de raw.githubusercontent
+        if (j.content && j.encoding === 'base64') {
+          try {
+            const decoded = JSON.parse(atob(j.content.replace(/\n/g, ''))) as { url?: string }
+            return decoded.url ? decoded.url.replace(/\/$/, '') : null
+          } catch {
+            return null
+          }
+        }
+        return null
       } catch {
         return null
       } finally {
