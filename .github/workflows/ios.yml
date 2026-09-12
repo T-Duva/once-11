@@ -1,0 +1,91 @@
+# Compila Once 11 iOS en macOS (el .ipa instalable necesita secrets de firma Apple).
+name: iOS
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: Set Xcode marketing version
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          PBX="ios/App/App.xcodeproj/project.pbxproj"
+          sed -i '' "s/MARKETING_VERSION = [^;]*/MARKETING_VERSION = $VER/" "$PBX"
+          BUILD=$(echo "$VER" | awk -F. '{print $1*10000+$2*100+$3}')
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [^;]*/CURRENT_PROJECT_VERSION = $BUILD/" "$PBX"
+          echo "version=$VER build=$BUILD"
+      - name: Archive (unsigned smoke if no signing secrets)
+        working-directory: ios/App
+        run: |
+          set -e
+          if [ -n "${{ secrets.APPLE_TEAM_ID }}" ] && [ -n "${{ secrets.BUILD_CERTIFICATE_BASE64 }}" ]; then
+            echo "Firma Apple configurada — archive firmado"
+            CERT_PATH="$RUNNER_TEMP/once11.p12"
+            echo "${{ secrets.BUILD_CERTIFICATE_BASE64 }}" | base64 --decode > "$CERT_PATH"
+            KEYCHAIN="$RUNNER_TEMP/once11.keychain-db"
+            security create-keychain -p "" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "" "$KEYCHAIN"
+            security import "$CERT_PATH" -P "${{ secrets.P12_PASSWORD }}" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+            security list-keychain -d user -s "$KEYCHAIN"
+            PROFILE_PATH="$RUNNER_TEMP/once11.mobileprovision"
+            echo "${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}" | base64 --decode > "$PROFILE_PATH"
+            mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+            cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/"
+            xcodebuild -project App.xcodeproj -scheme App \
+              -configuration Release -sdk iphoneos \
+              -archivePath "$RUNNER_TEMP/Once11.xcarchive" \
+              DEVELOPMENT_TEAM="${{ secrets.APPLE_TEAM_ID }}" \
+              CODE_SIGN_STYLE=Manual \
+              archive
+            EXPORT_PLIST="$RUNNER_TEMP/ExportOptions.plist"
+            sed "s/APPLE_TEAM_ID/${{ secrets.APPLE_TEAM_ID }}/" \
+              "$GITHUB_WORKSPACE/tools/ios-export-options.plist" > "$EXPORT_PLIST"
+            xcodebuild -exportArchive \
+              -archivePath "$RUNNER_TEMP/Once11.xcarchive" \
+              -exportPath "$RUNNER_TEMP/export" \
+              -exportOptionsPlist "$EXPORT_PLIST"
+            cp "$RUNNER_TEMP/export/"*.ipa "$GITHUB_WORKSPACE/once-11.ipa"
+          else
+            echo "Sin secrets de firma — archive sin firmar (no instalable en iPhone)"
+            xcodebuild -project App.xcodeproj -scheme App \
+              -configuration Release -sdk iphoneos \
+              -archivePath "$RUNNER_TEMP/Once11.xcarchive" \
+              CODE_SIGNING_ALLOWED=NO \
+              archive
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Once11-ios
+          path: |
+            once-11.ipa
+            ios
+          if-no-files-found: warn
+      - name: Publish IPA to GitHub Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VER=$(node -p "require('./package.json').version")
+          TAG="v$VER"
+          if [ ! -f once-11.ipa ]; then
+            echo "Sin once-11.ipa firmado — no hay asset de release (hace falta secrets Apple)"
+            exit 0
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" once-11.ipa --clobber
+          else
+            gh release create "$TAG" once-11.ipa --title "Once 11 $VER" --notes "Once 11 $VER (iOS)"
+          fi
+          echo "IPA publicado en https://github.com/T-Duva/once-11/releases/download/$TAG/once-11.ipa"

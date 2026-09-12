@@ -1,4 +1,4 @@
-node_modules
+﻿node_modules
 dist
 data
 inbox
@@ -11,6 +11,7 @@ node_modules/.tmp
 tools/*.exe
 public/icons/icon-source.png
 once-11.apk
+once-11.ipa
 apk-out
 android/.gradle
 android/app/build
@@ -18,3 +19,7 @@ android/build
 android/local.properties
 android/captures
 android/.idea
+.env.local
+tools/.cursor_api_key
+
+tools/_tunnelmole*.log

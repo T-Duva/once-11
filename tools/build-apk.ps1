@@ -15,7 +15,8 @@ if ($env:JAVA_HOME) {
 }
 
 Write-Host 'Compilando web...'
-npm run build | Out-Host
+npm run build
+if ($LASTEXITCODE -ne 0) { throw "npm run build falló ($LASTEXITCODE)" }
 
 Write-Host 'Sincronizando Capacitor...'
 npx cap sync android | Out-Host
@@ -77,3 +78,30 @@ if ($ver -match '^\d+\.\d+\.\d+( v)?$') {
 $apkDl = Join-Path $root 'apk-dl'
 if (Test-Path $apkDl) { Copy-Item $built (Join-Path $apkDl 'once-11.apk') -Force }
 Write-Host "Listo: once-11.apk ($( (Get-Item (Join-Path $root 'once-11.apk')).Length ) bytes)"
+
+if ($ver -match '^\d+\.\d+\.\d+') {
+  $tag = "v$ver"
+  $apk = Join-Path $root 'once-11.apk'
+  Write-Host "GitHub release $tag ..."
+  $releaseExists = $false
+  try {
+    gh release view $tag 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+  } catch {
+    $releaseExists = $false
+  }
+  if (-not $releaseExists) {
+    gh release create $tag $apk --title "Once 11 $ver" --notes "Once 11 $ver"
+  } else {
+    gh release upload $tag $apk --clobber
+  }
+  if ($LASTEXITCODE -ne 0) { throw "No se publico el release $tag en GitHub" }
+  $ipa = Join-Path $root 'once-11.ipa'
+  if (Test-Path $ipa) {
+    Write-Host "GitHub release $tag: subiendo once-11.ipa ..."
+    gh release upload $tag $ipa --clobber
+    if ($LASTEXITCODE -ne 0) { throw "No se pudo subir once-11.ipa al release $tag" }
+    Write-Host "IPA en release: $tag"
+  }
+  Write-Host "Release publicado: $tag"
+}
